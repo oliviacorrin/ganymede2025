@@ -33,7 +33,7 @@ pden_j = 56 % (amu/cm^3) Jovian plasma density - number density * pmass
 % right now these are constant; later some will be varied to match up with
 % different orientations of the moon in the PS.
 r_g = 2.634*10^6 % (m) Ganymede radius
-b_g = 719*10^-9 % (T) Ganymede equatorial B field strength 
+b_eq_g = 719*10^-9 % (T) Ganymede equatorial B field strength 
 % b_dir_g = % 3 component Ganymede B field direction vector
 % rho_g = % (amu/cm^3) Ganymede plasma density 
 % v_g = Ganymede plasma velocity
@@ -86,10 +86,8 @@ grid on
 % Onset condition 1: diamagnetic drift condition. 
 
 % Before calculations, double-check values so we don't divide by zero
-% if v_g == 0 || v_j == 0 || b_g == 0 || b_j == 0 
-%   disp('Cannot divide by zero')
-%   return
-% end
+% 
+
 
 % Find the ion inertial length to use in calculations.
 % First convert plasma density (amu/cm^-3) to protons number density (m^-3)
@@ -98,17 +96,7 @@ hplus_num_density = rho_g*1.66*10^-21/1.00727647 % [m^-3]
 % oplus_num_density = [] Goal: add in O+?
 ion_inertial_length = sqrt(pmass/(hplus_num_density*mu_0*q^2)) 
 
-% Find the change in plasma beta to use in calculations.
-% delta_beta = abs(plasma_beta_j - plasma_beta_g)
 
-% Calculate magnetic shear angle between Jovian & Ganymede fields using dot
-% product
-% cos_theta_b = dot(b_dir_j/norm(b_dir_j),b_dir_g/norm(b_dir_j)) % returns
-% cosine of the shear angle in radians
-% magnetic_shear = acos(cos_theta_b)
 
-% Diamagnetic drift condition from Masters 2014:
-% drift_condition = 2*atan(ion_inertial_length*delta_beta)/(2*ion_inertial_length))
-% diamagnetic_drift = magnetic_shear > drift_condition 
 
 % Onset condition 2: flow shear onset condition. 
