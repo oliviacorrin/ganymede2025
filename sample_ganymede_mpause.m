@@ -22,9 +22,9 @@ gamma = 5/3; % (dimensionless) used in sonic mach number calculation
 
 % define upstream parameters
 v_j = 400 *10^3; % (m/s) Jovian plasma velocity
-rho_j = [] % (kg/m^3) Jovian plasma density - number density * pmass 
-b_j = [] % (T) Jovian magnetic field strength
-b_dir_j = [] % Jovian magnetic field direction (in GPhiO?)
+% rho_j = [] % (kg/m^3) Jovian plasma density - number density * pmass 
+% b_j = [] % (T) Jovian magnetic field strength
+% b_dir_j = [] % Jovian magnetic field direction (in GPhiO?)
 
 % define moon parameters
 % right now these are constant; later some will be varied to match up with
@@ -32,8 +32,8 @@ b_dir_j = [] % Jovian magnetic field direction (in GPhiO?)
 r_g = 2.634*10^6 % (m) Ganymede radius
 b_eq_g = 719*10^-9 % (T) Ganymede equatorial B field strength 
 b_dir_g = [1 1 1] % Ganymede B field direction vector
-rho_g = % (kg/m^3) Ganymede plasma density 
-plasma_beta_g = % plasma beta value at Ganymede
+% rho_g = % (kg/m^3) Ganymede plasma density 
+% plasma_beta_g = % plasma beta value at Ganymede
 
 % This will eventually be calculated in the code for varying upstream
 % parameters(?), but for now, using a constant
@@ -47,24 +47,22 @@ mp = 2.2 % (in r_g) magnetopause standoff distance IN plasma sheet using joviand
 % get 2D (y,z) GPhiO coordinates and use to create paraboloid meshgrid
 % goal: to extract these from data (using rough estimates for now)
 n = 101
-x = linspace(-mp-1,10,n)
 y = linspace(-10,10,n)
 z = linspace(-10,10,n)
-[X1,Y1,Z1] = meshgrid(x,y,z)
 
 % paraboloid magnetopause surface - from Donaldson et al. 2024, derived
 % from Cooling et al. 2001:
 % Y^2 + Z^2 = 2mp(X+mp)
 % rearrange to find X:
 % (Y^2 + Z^2 - mp)/2mp = X
-[Y2,Z2] = meshgrid(x,y,z)
-X2 = (Y2.^2 + Z2.^2 - mp)/2*mp
+[Y,Z] = meshgrid(y,z)
+X = (Y.^2 + Z.^2 - mp)/2*mp
 
 % paraboloids on either side of mpause 
-mp1 = mp - 0.3
-mp2 = mp + 0.3
-p1 = (Y2.^2 + Z2.^2 - mp1)/2*mp1
-p2 = (Y2.^2 + Z2.^2 - mp2)/2*mp2
+% mp1 = mp - 0.3
+% mp2 = mp + 0.3
+% p1 = (Y2.^2 + Z2.^2 - mp1)/2*mp1
+% p2 = (Y2.^2 + Z2.^2 - mp2)/2*mp2
 
 % plot using surf(x,y,z) function, which represents each value in matrix Z as the height of a surface above x-y plane.
 figure
