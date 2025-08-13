@@ -11,11 +11,17 @@ for i = 1:3
     trajectory(:,i) = G1.data(:,i+4)
 end
 
+% spacecraft-measured B field values
+B_field = zeros(length(G1.data),3)
+for i = 1:3
+    B_field(:,i) = G1.data(:,i)
+end
+
 % create 3d plot of trajectory 
 plot3(trajectory(:,1),trajectory(:,2),trajectory(:,3),'-b')
-xlabel("x (in R_j)")
-ylabel("y (in R_j)")
-zlabel("z (in R_j)")
+xlabel("x (in R_g)")
+ylabel("y (in R_g)")
+zlabel("z (in R_g)")
 title("G1 trajectory practice graph")
 hold on
 % add Ganymede at origin 
@@ -25,10 +31,13 @@ X2 = X*r_factor
 Y2 = Y*r_factor
 Z2 = Z*r_factor 
 % assuming R_j 
-G1_plot = surf(X2,Y2,Z2)
+% G1_plot = surf(X2,Y2,Z2)
 
 % assuming R_g
-% G1_plot = surf(X,Y,Z)
+G1_plot = surf(X,Y,Z)
 G1_plot.FaceColor = [0.25 0.8 0.7]
 legend("trajectory", "Ganymede")
 axis equal
+
+% add quiver plot to show magnitude/direction of B field 
+quiver3(trajectory(:,1),trajectory(:,2),trajectory(:,3),B_field(:,1),B_field(:,2),B_field(:,3))
