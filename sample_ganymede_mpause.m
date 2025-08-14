@@ -42,26 +42,29 @@ b_g = 719*10^-9 % (T) Ganymede equatorial B field strength
 
 % This will eventually be calculated in the code for varying upstream
 % parameters(?), but for now, using a constant
-mp = 2.2 % (in r_g) magnetopause standoff distance IN plasma sheet using jovianden = 56 amu/cm^3
+standoff_distance = 2.2 % (in r_g) magnetopause standoff distance IN plasma sheet using jovianden = 56 amu/cm^3
 
 %% Volume 
 % Currently using a plasma density value of 56 amu/cm^3 corresponding to a
 % position inside the Jovian plasma sheet. Eventually plan to add other
 % values corresponding to different locations wrt the PS.
 
-% get 2D (y,z) GPhiO coordinates and use to create paraboloid meshgrid
+% get (x, y, z) GPhiO coordinates and use to create paraboloid meshgrid
 % goal: to extract these from data (using rough estimates for now)
 n = 101 % spacing of y,z vectors - increase for a finer mesh
-y = linspace(-10,10,n)
-z = linspace(-10,10,n)
+x_init = linspace(-standoff_distance-1,10,n)
+y_init = linspace(-10,10,n)
+z_init = linspace(-10,10,n)
+% set up volume
+[x_vol,y_vol,z_vol] = meshgrid(x_init,y_init,z_init)
 
 % paraboloid magnetopause surface - from Donaldson et al. 2024, derived
 % from Cooling et al. 2001:
 % Y^2 + Z^2 = 2mp(X+mp)
 % rearrange to find X:
 % (Y^2 + Z^2 - mp)/2mp = X
-[Y,Z] = meshgrid(y,z)
-paraboloid = (Y.^2 + Z.^2 - mp)/2*mp
+[y_parab,z_parab] = meshgrid(y_init,z_init)
+paraboloid = (y_parab.^2 + z_parab.^2 - standoff_distance)/2*standoff_distance
 
 % paraboloids on either side of mpause 
 % mp1 = mp - 0.3
@@ -71,7 +74,7 @@ paraboloid = (Y.^2 + Z.^2 - mp)/2*mp
 
 % plot using surf(x,y,z) function, which represents each value in matrix Z as the height of a surface above x-y plane.
 figure
-magnetopause = surf(paraboloid,Y,Z)
+magnetopause = surf(paraboloid,y_parab,z_parab)
 title('Paraboloid model of Ganymede magnetopause with standoff distance 2.2 R_G')
 xlabel('X (R_G)')
 ylabel('Y (R_G)')
@@ -107,8 +110,13 @@ ion_inertial_length = sqrt(pmass/(hplus_num_density*mu_0*q^2))
 % cosine of the shear angle in radians
 % magnetic_shear = acos(cos_theta_b)
 
-% Diamagnetic drift condition from Masters 2014:
+%% Onset condition 1: Diamagnetic drift condition from Masters 2014:
 % drift_condition = 2*atan(ion_inertial_length*delta_beta)/(2*ion_inertial_length))
-% diamagnetic_drift = magnetic_shear > drift_condition 
+% diamagnetic_drift = magnetic_shear > drift_condition     
+% if diamagnetic_drift 
+%     disp('Condition 1 met')
+% else
+%     disp('Condition 1 not met')
+% end
 
-% Onset condition 2: flow shear onset condition. 
+%% Onset condition 2: flow shear onset condition from Masters 2014:
