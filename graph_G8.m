@@ -41,3 +41,16 @@ axis equal
 
 % add quiver plot to show magnitude/direction of B field 
 quiver3(trajectory(:,1),trajectory(:,2),trajectory(:,3),B_field(:,1),B_field(:,2),B_field(:,3))
+hold off
+
+% plot B field time series
+% first plot the 3 components (in GPhiO)
+plot(B_field(:,1))
+hold on
+plot(B_field(:,2))
+plot(B_field(:,3))
+plot(G8.data(:,4))
+xlabel("time elapsed (units?)")
+ylabel("B field strength (nT)")
+title("G8 flyby magnetometer measurements")
+legend("B_x","B_y","B_z","B (mag)")
