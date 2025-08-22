@@ -61,5 +61,6 @@ plot3(x_cross1, y_cross1, z, '--', 'Color',[.8 0 .2])
 plot3(x_cross2, y_cross2, z, '--', 'Color',[.8 0 .2])
 
 legend("trajectory", "Ganymede", "B field quiver plot", "magnetopause boundary")
+grid on
 
 hold off
