@@ -21,7 +21,7 @@ for i = 1:3
 end
 
 %% create 3d plot of trajectory 
-plot3(trajectory(:,1),trajectory(:,2),trajectory(:,3),'-b')
+plot3(trajectory(:,1),trajectory(:,2),trajectory(:,3),'-k','LineWidth',2)
 xlabel("x (in R_g)")
 ylabel("y (in R_g)")
 zlabel("z (in R_g)")
@@ -39,37 +39,27 @@ Z2 = Z*r_factor
 % assuming R_g
 G8_plot = surf(X,Y,Z)
 G8_plot.FaceColor = [0.25 0.8 0.7]
-legend("trajectory", "Ganymede")
+G8_plot.EdgeColor = 'none'
 axis equal
 
 %% add quiver plot to show magnitude/direction of B field 
-quiver3(trajectory(:,1),trajectory(:,2),trajectory(:,3),B_field(:,1),B_field(:,2),B_field(:,3))
+quiver3(trajectory(:,1),trajectory(:,2),trajectory(:,3),B_field(:,1),B_field(:,2),B_field(:,3),'Color',[0.1 0.9 0])
+
+%% add the magnetopause boundaries to more clearly visualize 
+% define z values
+z = -2:0.1:2
+
+% create constant vectors for both crossing x and y values with the same number of elements as z
+x_cross1 = -1.48 *ones(size(z))
+y_cross1 = -1.22 * ones(size(z))
+
+x_cross2 = -1.33*ones(size(z))
+y_cross2 = 1.29*ones(size(z))
+
+% plot lines
+plot3(x_cross1, y_cross1, z, '--', 'Color',[.8 0 .2])
+plot3(x_cross2, y_cross2, z, '--', 'Color',[.8 0 .2])
+
+legend("trajectory", "Ganymede", "B field quiver plot", "magnetopause boundary")
+
 hold off
-
-%% plot B field time series
-% plot the components (in GPhiO)
-plot(B_field(:,1))
-hold on
-plot(B_field(:,2))
-plot(B_field(:,3))
-% add the magnitude 
-plot(G8.data(:,4))
-xlabel("time elapsed (# of data points out of total taken)")
-ylabel("B field strength (nT)")
-title("G8 flyby magnetometer measurements")
-
-%% add apparent boundaries of magnetopause corresponding to sharp changes in
-%% B field (all eyeballed by yours truly)
-% first apparent boundary
-xline(2284,'-k','LineWidth',2)
-xline(4586,'-k','LineWidth',2)
-% possible bounds to the entrance crossing 
-xline(2132,'--','Color',[0 .8 .8],'LineWidth',2)
-xline(2680,'--','Color',[0 .8 .8],'LineWidth',2)
-% possible bounds to the exit crossing 
-xline(4728,'--','Color',[0 .8 .8],'LineWidth',2)
-xline(4159,'--','Color',[0 .8 .8],'LineWidth',2)
-legend("B_x","B_y","B_z","B (mag)",'mpause entrance crossing','mpause exit crossing','possible min/max crossing bounds')
-
-
-
