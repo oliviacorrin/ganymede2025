@@ -120,7 +120,6 @@ end
 
 
 % Employ approach from Cooling et al (2001) to drape the Jovian field lines
-% over the magnetopause nose
 A = 2; % I'm not sure if this works for a subsonic flow, but the paper says A is usually 2
 for i = 1:1:n
     for j = 1:1:n
