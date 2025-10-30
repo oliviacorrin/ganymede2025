@@ -17,8 +17,9 @@ mu_0 = 4*pi*10^-7; % (H/m) vacuum permeability
 emass = 9.109 * 10^-31; % (kg) electron mass
 q = -1.602*10^-19; % (C) electron charge
 flowspeed = 139*10^3; % (m/s) speed of Jovian plasma 
-kb = 1.38*10^-23; % (JK-1) Boltzmann's constant
+k_B = 1.38*10^-23; % (JK-1) Boltzmann's constant
 gamma = 5/3; % (dimensionless) used in sonic mach number calculation
+L = 1; % (km) current sheet half-thickness - no idea what is realistic to put here...
 
 %% Ganymede Parameters
 R = 2.634*10^6; % (m) Ganymede radius 
@@ -27,8 +28,8 @@ MP = 2.2; % magnetopause standoff distance in planetary radii
 limitplotting = 8; % Random guess for where we want the paraboloid to end
 ganymede_surface_den = 0.002 * 10^6 * pmass; % (kg/m^3) need Ganymede value. plasma mass density inside Ganymede's magnetosphere
 alfven_num = 0.62; % Alfven Mach number
-ganymede_ionlength = sqrt(pmass/(ganymede_surface_den*mu_0*q^2));
-ganymede_beta = 1; % placeholder
+ganymede_ionlength = sqrt(pmass/(ganymede_surface_den*mu_0*q^2)); 
+T_g = 1; % placeholder for plasma temperature value
  
 %% Upstream Parameters
 % Assume B_z is only nonzero component of upstream field (in plasma sheet)
@@ -39,7 +40,7 @@ upstream_Bx = 10e-200; % 0
 upstream_By = 10e-200; % 0
 jupiter_den = 0.03 * 10^6 * pmass; % (kg/m^3) come back to this. plasma mass density on the Jovian side of the magnetopause
 upstream_ionlength = sqrt(pmass/(jupiter_den*mu_0*q^2));
-jovian_beta = 1; % placeholder 
+T_j = 1; % placeholder for plasma temperature value
 
 %%  Set up volume using meshgrid
 % meshgrid takes 2 input vectors & generates 2 2D matrices representing 
@@ -240,7 +241,7 @@ for i = 1:n
 end
 
 
-%% Calculate the left hand side of diamagnetic drift condition (theta_b)
+%% Calculate the diamagnetic drift condition
 % Reconnection onset requires a "sub-Alfvénic relative diamagnetic drift
 % between ions & electrons within the current sheet in the diretion of
 % reconnection" 
@@ -254,63 +255,123 @@ cos_theta_b = b1dotb2_2d ./ b1dotb2_normalize;
 % antiparallel
 cos_theta_b(b1dotb2_normalize == 0) = -1;
 % Take arccos of the resulting angle 
-diamagnetic_leftside = acos(cos_theta_b);
+diamagnetic_lhs = acos(cos_theta_b);
         
 % Old way of calculating theta_b: revised to above on 9/30  
 % bmag_ganymede(j,k) = sqrt(bganymede_bx(j,k)^2 + bganymede_by(j,k)^2 + bganymede_bz(j,k)^2);
 % bmag_upstream(j,k) = sqrt(jovian_bx_2d(j,k)^2 + jovian_by_2d(j,k)^2 + jovian_bz_2d(j,k)^2);
 % leftside_1(j,k) = b1dotb2(j,k)/(bmag_ganymede(j,k) * bmag_upstream(j,k));
 
-%% Calculate the right hand side of diamagnetic drift condition
 % The drift condition requires that the magnetic shear is greater than the following:
 % diamagnetic_drift = 2*atan(ion_inertial_length*delta_beta)/(2*ion_inertial_length))
 
-delta_beta = abs(jovian_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
-ion_inertial_length = zeros(n,n); % ion inertial length 
-diamagnetic_rightside = zeros(n,n); % vector to store diamagnetic drift values 
+% Calculate plasma beta: the ratio of magnetic to dynamic pressure in both
+% magnetospheres (beta = 2*mu_0*P/B^2)
+% Calculate plasma pressures using P = N*k_B*T
+ganymede_plasma_pressure = ganymede_den_2d .* k_B .* T_g;
+jovian_plasma_pressure = jovian_den_2d .* k_B * T_j; 
+% Plasma beta calculations
+ganymede_beta = 2*mu_0 .* ganymede_plasma_pressure .\ ganymede_bmag_2d.^2; 
+upstream_beta = 2*mu_0 .* jovian_plasma_pressure .\ jovian_bmag_2d.^2; 
+delta_beta = abs(upstream_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
 
-% For loop to iterate over 2d space and caculate ion inertial length
-for j = 1:n
-    for k = 1:n 
-        % if we are in Ganymede space, calculate ion inertial length using
-        % Ganymede plasma density
-        ion_inertial_length(j,k) = sqrt((pmass)/(ganymede_den_2d(j,k)*mu_0*q^2));
-        % otherwise, we are in upstream Jupiter field and need to calculate
-        % ion inertial length using Jupiter plasma density 
-        ion_inertial_length(j,k) = sqrt((pmass)/(jovian_den_2d(j,k)*mu_0*q^2));
-    end
-end
+% For now, using Jovian density to calculate the ion inertial length -
+% could implement an if/else statement for Ganymede space too but not sure
+% if it's worth it since Jovian field is so much stronger I imagine it controls the
+% behavior?
+jovian_number_den = jovian_den_2d ./ pmass; % ion number density 
+ion_inertial_length = sqrt(pmass ./ (jovian_number_den .* mu_0 * q^2)); 
 
-% For loop to iterate over 2D space and calculate the diamagnetic drift
-for j = 1:n
-    for k = 1:n
-        diamagnetic_rightside(j,k) = 2*atan(ion_inertial_length(j,k)*delta_beta)/(2*ion_inertial_length(j,k));
-    end
-end
+% Calculate the RHS of the diamagnetic drift condition and store it 
+diamagnetic_rhs = 2 .* atan((ion_inertial_length .* delta_beta)./ (2 .* L));
 
-%% Calculate the LHS of plasma beta drift condition
+%% Calculate the flow shear drift condition
 % Reconnection onset requires "a sub-Alfvénic flow shear across the current
 % sheet in the direction of reconnection outflow"
+% Simplifying assumption: Ganymede plasma is not moving, so the internal
+% flow does not contrbute to the flow shear.
+% Also for now assuming that Jovian plasma is moving only along the
+% x-direction (in the current sheet) so the Jovian plasma velocity has no y
+% or z components. 
+% This means that delta_v = v_jovian - v_ganymede = v_jovian_x, but this
+% equals zero bc the reconnection outflow dir was found to be in the Y-Z
+% plane...
+% This means one of two things: I did it wrong (probable), or else we need
+% more sophisticated math/assumptions to get Y and Z flow components (flow
+% components out of the current sheet)
+flowshear_lhs = flowspeed; % simplification for now of flow shear - see logic above 
 
-% Calculate flow shear in direction of reconnection outflow
-flowspeed_ganymede = zeros(n,n); % plasma velocity inside the magnetosphere
-flowspeed_upstream = zeros(n,n); % upstream Jovian plasma velocity 
-flowshear_leftside = zeros(n,n); % vector to store flow shear values 
+%% GET CAROL TO REVIEW THIS LOGIC!!! 
+% First via Masters we have to determine the direction of reconnection outflow, which
+% is also the direction of the reconnecting magnetic fields. 
+% "To determine the direction parallel to the reconnecting fields at each
+% point, we consider a line that bisects the shear angle between the
+% adjacent magnetic fields and then use the direction perpendicular to this
+% line that also lies parallel to the local magnetopause surface." (Swisdak
+% and Drake, 2007; Derosche et al, 2012) as quoted in Masters 2014
+% Bisector line is perpendicular to both fields, so this should be defined
+% by their cross product
+bisector_x = ganymede_by_2d .* jovian_bz_2d - ganymede_bz_2d .* jovian_by_2d;
+bisector_y = ganymede_bz_2d .* jovian_bx_2d - ganymede_bx_2d .* jovian_bz_2d;
+bisector_z = ganymede_bx_2d .* jovian_by_2d - ganymede_by_2d .* jovian_bx_2d;
 
+% The outflow direction is then perpendicular to this bisector and also
+% parallel to the magnetopause - in the case of this simplified model, which 
+% contains a current sheet along the X axis, the outflow direction is then defined 
+% by the YZ plane. So the outflow direction must be (1) perpendicular to
+% the bisector, i.e. outflow (dot) bisector = 0, and (2) parallel to YZ
+% plane, i.e. outflow = (0, y, z)
 
+% Since outflow_dir is a unit vector, outflow_dir_x^2 + outflow_dir_y^2 +
+% outflow_dir_z^2 = 1 => outflow_dir_y^2 + outflow_dir_z^2 = 1 (since
+% outflow_dir_x = 0)
+% since we have bisector (dot) outflow_dir = 0 which can be expressed as 
+% outflow_dir_y*bisector_y + outflow_dir_z*bisector_z = 0
+% We can solve for the x and y components of outflow_dir
+outflow_dir_x = zeros(n,n);
+outflow_dir_y = -bisector_z / (sqrt(bisector_y^2 + bisector_z^2));
+outflow_dir_z = bisector_y / (sqrt(bisector_y^2 + bisector_z^2));
 
-%% Calculate RHS of plasma beta drift condition
-flowshear_rightside = zeros(n,n);
+% We need to grab the projections of both B fields onto the reconnection
+% outflow direction. (there is no x component to the outflow
+% direction)
+jovian_2db_projection = abs(jovian_by_2d .* outflow_dir_y + jovian_bz_2d .* outflow_dir_z);
+ganymede_2db_projection = abs(ganymede_by_2d .* outflow_dir_y + ganymede_bz_2d .* outflow_dir_z);
 
-% The following calculation should use variables for Ganymede_bmag and Jovian_bmag that should be only the reconnecting components of
-% the magnetic fields. Until I talk to Carol about which components these should be, using the total mag. as a placeholder.
-% Start loop to calculate components of the RHS
-for i = 1:n
-    for k = 1:n
-        flowshear_rightside(i,k) = sqrt((jovian_bmag_2d(i,k)^2 + jovian_bmag_2d(i,k)*ganymede_bmag_2d(i,k))/jovian_den_2d*mu_0)
-    end
-end
+% Calculate the entire RHS and store it
+flowshear_rhs = sqrt((jovian_2db_projection.^2 + (jovian_2db_projection .* ganymede_2db_projection))/(jovian_den_2d*mu_0));
 
-%% Plot regions on projection of Ganymede's surface where reconnection is  either allowed or disallowed based on the 2 conditions
+%% Determine regions where reconnection is allowed and where it is disallowed
+% Logical check for diamagnetic drift condition
+diamagnetic_shear_condition = (diamagnetic_lhs > diamagnetic_rhs);
 
+% Logical check for flow shear condition
+flow_shear_condition = (flowshear_lhs < flowshear_rhs);
 
+% If both conditions are met, we have reconnection! 
+% ...IT'S ALIVE!!!! 
+reconnection_frankenstein = diamagnetic_shear_condition & flow_shear_condition; 
+
+%% Plot reconnection regions
+% Convert reconnection_frankenstein from logical array to color map array
+reconnection_colors = double(reconnection_frankenstein);
+
+% Create figure for plotting
+figure; 
+hold on; 
+colormap([0 1 0; 1 1 0]); 
+
+plot_surface = surf(paraboloid, yii, zii, reconnection_colors); % plot the paraboloid surface with the color map
+set(plot_surface, 'EdgeColor', 'none', 'FaceColor', 'flat'); % want the delineations between regions to be clear
+clim([0 1]); % set color limits to logical values
+
+view(3); % 3D
+axis equal; 
+
+xlabel('X (R_G)');
+ylabel('Y (R_G)');
+zlabel('Z (R_G)');
+
+title('Predicted magnetic reconnection regions at the magnetopause of Ganymede');
+
+colorbar('Ticks', [0.25, 0.75], 'TickLabels', {'Reconnection disallowed', 'Reconnection allowed'});
