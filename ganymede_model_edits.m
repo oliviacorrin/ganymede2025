@@ -39,7 +39,7 @@ upstream_Bx = 10e-200; % 0
 upstream_By = 10e-200; % 0
 jupiter_den = 0.03 * 10^6 * pmass; % (kg/m^3) come back to this. plasma mass density on the Jovian side of the magnetopause
 upstream_ionlength = sqrt(pmass/(jupiter_den*mu_0*q^2));
-upstream_beta = 1; % placeholder 
+jovian_beta = 1; % placeholder 
 
 %%  Set up volume using meshgrid
 % meshgrid takes 2 input vectors & generates 2 2D matrices representing 
@@ -64,11 +64,14 @@ paraboloid = 1/(2*MP)*(yii.^2 + zii.^2) - MP; % represent magnetopause surface a
 % the curved grid spaces line up with each other in each paraboloid. 
 % Initial code from Angela (past grad student) for use at Uranus: works to test values on either
 % side of the boundary.
+% We can use these paraboloids to represent either side of the
+% "infinitesimally" small current sheet over which reconnection takes
+% place.
 % Q: since magnetopause is smaller at Ganymede maybe we should reduce 0.3 value?
 mp1 = MP - 0.3; % bounding paraboloid standoff distance (0.3 Ganymede radii in one direction from MP)
 mp2 = MP + 0.3; % bounding paraboloid standoff distance (0.3 Ganymede radii in other direction from MP)
-p1 = 1/(2*mp1)*(yii.^2 + zii.^2) - mp1; % first bounding paraboloid
-p2 = 1/(2*mp2)*(yii.^2 + zii.^2) - mp2; % second bounding paraboloid
+p1 = 1/(2*mp1)*(yii.^2 + zii.^2) - mp1; % first bounding paraboloid located slightly inside MP
+p2 = 1/(2*mp2)*(yii.^2 + zii.^2) - mp2; % second bounding paraboloid loacted slightly outside MP
 
 %% Define grid spaces where Jovian field &  magnetosphere are located.
 % All spaces where grid = 0 are inside the magnetosphere 
@@ -101,10 +104,11 @@ end
 jovian_bx = zeros(n,n,n); 
 jovian_by = zeros(n,n,n);
 jovian_bz = zeros(n,n,n);
-jovian_btot_2d = zeros(n,n,n);
+jovian_bmag_2d = zeros(n,n,n);
 jovian_den_2d = zeros(n,n,n);
 
 % Initialize vectors to store Ganymede B-field components and density
+% Check to see where/if these are used or duplicated 
 ganymede_bx = zeros(n,n,n);
 ganymede_by = zeros(n,n,n);
 ganymede_bz = zeros(n,n,n);
@@ -123,7 +127,7 @@ for i = 1:1:n
                 jovian_bz(i,j,k) = upstream_Bz;
                 jovian_by(i,j,k) = upstream_By;
                 jovian_bx(i,j,k) = upstream_Bx;
-                jovian_btot_2d(i,j,k) = sqrt(jovian_bz(i,j,k)^2 + jovian_by(i,j,k)^2 + jovian_bx(i,j,k)^2);
+                jovian_bmag_2d(i,j,k) = sqrt(jovian_bz(i,j,k)^2 + jovian_by(i,j,k)^2 + jovian_bx(i,j,k)^2);
                 jovian_den_2d(i,j,k) = jupiter_den;
             end
         end
@@ -178,10 +182,10 @@ for i = 1:1:n
 
             % Catch for if the draped field total is somehow larger than
             % the original upstream field
-            if drape_tot(i,j,k) > jovian_btot_2d(i,j,k)
-                drape_bx(i,j,k) = (drape_bx(i,j,k)/drape_tot(i,j,k)) * jovian_btot_2d(i,j,k);
-                drape_by(i,j,k) = (drape_by(i,j,k)/drape_tot(i,j,k)) * jovian_btot_2d(i,j,k);
-                drape_bz(i,j,k) = (drape_bz(i,j,k)/drape_tot(i,j,k)) * jovian_btot_2d(i,j,k);
+            if drape_tot(i,j,k) > jovian_bmag_2d(i,j,k)
+                drape_bx(i,j,k) = (drape_bx(i,j,k)/drape_tot(i,j,k)) * jovian_bmag_2d(i,j,k);
+                drape_by(i,j,k) = (drape_by(i,j,k)/drape_tot(i,j,k)) * jovian_bmag_2d(i,j,k);
+                drape_bz(i,j,k) = (drape_bz(i,j,k)/drape_tot(i,j,k)) * jovian_bmag_2d(i,j,k);
             end
         end
     end
@@ -192,111 +196,97 @@ end
 % Because the reconnection criteria happen only across the current sheet,
 % we need to isolate those values that lie only on either side of this
 % sheet.
-% Initialize matrices only using boundary values (values that lie right
-% along the magnetopause border) 
 
-% 2D boundary arrays mapping the field strength at MP surface only.
+% Initialize 2D boundary arrays only using boundary values (values that lie right
+% along the magnetopause border) 
 jovian_den_2d = zeros(n,n); % 2D Jovian plasma density array
 jovian_bz_2d = zeros(n,n); % 2D Jovian B field z component array
 jovian_by_2d = zeros(n,n); % 2D Jovian B field y component array
 jovian_bx_2d = zeros(n,n); % 2D Jovian B field x component array
-jovian_btot_2d = zeros(n,n); % 2D Jovian B field magnitude array
+jovian_bmag_2d = zeros(n,n); % 2D Jovian B field magnitude array
 
 ganymede_den_2d = zeros(n,n); % 2D Ganymede plasma density array
 ganymede_bx_2d = zeros(n,n); % 2D Ganymede B field x component array
 ganymede_by_2d = zeros(n,n); % 2D Ganymede B field y component array
 ganymede_bz_2d = zeros(n,n); % 2D Ganymede B field z component array
+ganymede_bmag_2d = zeros(n,n); % 2D Ganymede B field magnitude array
 
-% Test variables to store absolute difference from each grid point to p1 and p2
-% This helps to choose which 3D grid points actually lie along the 2D paraboloid 
-% so we can define from the thin sheet across which reconnection happens
-test_p1 = zeros(n,n,n);
-test_p2 = zeros(n,n,n);
-
-% Iterate over each 3D grid point
+% We need to find the closest spots on p1 and p2 to bound the current sheet analog we are
+% defining.
+% Calculate distance from each x coordinate to target and find the minimum
 for i = 1:n
-    for j = 1:n
         for k = 1:n
+            [~, p1_x] = min(abs(xi - p1(i,k))); % store the index of the minimum in p1_x_min - this is one x bound of the current sheet
+            [~, p2_x] = min(abs(xi - p2(i,k))); % store the index of the minimum in p1_x_min - this is one x bound of the current sheet
 
-            % Difference between grid x-coord. and the offset paraboloids
-            % p1,p2
-            test_p1(i,j,k) = abs(xg(1,j,1) - p1(i,k));
-            test_p2(i,j,k) = abs(xg(1,j,1) - p2(i,k));
-
-            % Set difference value so we are only taking B-field values
-            % from a thin layer close to the magnetopause 
-            % NEED to change this - 1.50 is way too big of a difference to
-            % see reconnection effects
-            difference = 1.50
-
-            if grid(i,j,k) == 0 % magnetosphere space
-                ganymede_den_2d(i,k) = ganymede_surface_den; % constant density in space inside the magnetosphere
-                % If we're close enough to the p1 then set the
-                % boundary values to Ganymede B-field
-                if test_p1(i,j,k) < difference
-                    ganymede_bx_2d(i,k) = ganymede_bx(i,j,k);
-                    ganymede_by_2d(i,k) = ganymede_by(i,j,k);
-                    ganymede_bz_2d(i,k) = ganymede_bz(i,j,k);
-                end
-            
-            % Note: the goal is to eventually test multiple Jovian density & field
-            % values depending on location w.r.t. the plasma sheet. This is
-            % an initial implementation that assumes constant density in
-            % space.
-            elseif grid(i,j,k) == 1 % Jupiter space
-                jovian_den_2d(i,k) = jupiter_den; % Jovian boundary density can be set equal to Jovian density
-                % If we're close enough to p2 then set the
-                % boundary values to Jovian B-field
-                if test_p2(i,j,k) < difference
-                    jovian_bz_2d(i,k) = drape_bz(i,j,k);
-                    jovian_by_2d(i,k) = drape_by(i,j,k);
-                    jovian_bx_2d(i,k) = drape_bx(i,j,k);
-                    jovian_btot_2d(i,k) = sqrt(jovian_bx_2d(i,k)^2 + jovian_by_2d(i,k)^2 + jovian_bz_2d(i,k)^2);
-                end
-
-            end
-
+            % Now fill in the 2D boundary arrays with the 3D field values
+            % at the boundary points (each point at index i, p1_x, k)
+            % Ganymede arrays
+            ganymede_den_2d(i,k) = ganymede_surface_den; % constant plasma density assumed inside the magnetosphere
+            ganymede_bx_2d(i,k) = ganymede_bx(i, p1_x, k);
+            ganymede_by_2d(i,k) = ganymede_by(i, p1_x, k);
+            ganymede_bz_2d(i,k) = ganymede_bz(i, p1_x, k);
+            % Calculate Ganymede B field magnitude
+            ganymede_bmag_2d(i,k) = sqrt(ganymede_bx_2d(i,k)^2 + ganymede_by_2d(i,k)^2 + ganymede_bz_2d(i,k)^2);
+       
+            % Jovian arrays
+            jovian_den_2d(i,k) = jupiter_den; % will vary this later
+            jovian_bx_2d(i,k) = drape_bx(i, p2_x, k);
+            jovian_by_2d(i,k) = drape_by(i, p2_x, k);
+            jovian_bz_2d(i,k) = drape_bz(i, p2_x, k);
+            % Calculate Jovian B field magnitude
+            jovian_bmag_2d(i,k) = sqrt(jovian_bx_2d(i,k)^2 + jovian_by_2d(i,k)^2 + jovian_bz_2d(i,k)^2);
         end
-
-    end
 end
+
 
 %% Calculate the left hand side of diamagnetic drift condition (theta_b)
 % Reconnection onset requires a "sub-Alfvénic relative diamagnetic drift
 % between ions & electrons within the current sheet in the diretion of
 % reconnection" 
-% initialize
-b1dotb2 = zeros(n,n); % dot product of 2 boundary fields
-bmag_ganymede = zeros(n,n); % Ganymede B-field mag.
-bmag_upstream = zeros(n,n); % Jovian upstream B-field mag.
-leftside_1 = zeros(n,n); % vector to store magnetic shear values (theta_b)
 
-for j = 1:n
-    for k = 1:n
+% Take the dot product of the two B field vectors and store in b1dotb2_2d
+b1dotb2_2d = ganymede_bx_2d .* jovian_bx_2d + ganymede_by_2d .* jovian_by_2d + ganymede_bz_2d .* jovian_bz_2d;
+b1dotb2_normalize = ganymede_bmag_2d .* jovian_bmag_2d; % need the magnitude to normalize the resulting vector
+
+cos_theta_b = b1dotb2_2d ./ b1dotb2_normalize;
+% If the product of the 2 fields is 0, make the magnitude vector
+% antiparallel
+cos_theta_b(b1dotb2_normalize == 0) = -1;
+% Take arccos of the resulting angle 
+diamagnetic_leftside = acos(cos_theta_b);
         
-        b1dotb2(j,k) = ganymede_bx_2d(j,k)*jovian_bx_2d(j,k) + ganymede_by_2d(j,k)*jovian_by_2d(j,k) + ganymede_bz_2d(j,k)*jovian_bz_2d(j,k);
-        leftside_1(j,k) = acos(b1dotb2(j,k));
-        
-        % Old way of calculating theta_b: revised to above on 9/30  
-        % bmag_ganymede(j,k) = sqrt(bganymede_bx(j,k)^2 + bganymede_by(j,k)^2 + bganymede_bz(j,k)^2);
-        % bmag_upstream(j,k) = sqrt(jovian_bx_2d(j,k)^2 + jovian_by_2d(j,k)^2 + jovian_bz_2d(j,k)^2);
-        % leftside_1(j,k) = b1dotb2(j,k)/(bmag_ganymede(j,k) * bmag_upstream(j,k));
-    end
-end
+% Old way of calculating theta_b: revised to above on 9/30  
+% bmag_ganymede(j,k) = sqrt(bganymede_bx(j,k)^2 + bganymede_by(j,k)^2 + bganymede_bz(j,k)^2);
+% bmag_upstream(j,k) = sqrt(jovian_bx_2d(j,k)^2 + jovian_by_2d(j,k)^2 + jovian_bz_2d(j,k)^2);
+% leftside_1(j,k) = b1dotb2(j,k)/(bmag_ganymede(j,k) * bmag_upstream(j,k));
 
 %% Calculate the right hand side of diamagnetic drift condition
 % The drift condition requires that the magnetic shear is greater than the following:
 % diamagnetic_drift = 2*atan(ion_inertial_length*delta_beta)/(2*ion_inertial_length))
 
-delta_beta = abs(upstream_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
+delta_beta = abs(jovian_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
 ion_inertial_length = zeros(n,n); % ion inertial length 
+diamagnetic_rightside = zeros(n,n); % vector to store diamagnetic drift values 
 
+% For loop to iterate over 2d space and caculate ion inertial length
 for j = 1:n
     for k = 1:n 
+        % if we are in Ganymede space, calculate ion inertial length using
+        % Ganymede plasma density
+        ion_inertial_length(j,k) = sqrt((pmass)/(ganymede_den_2d(j,k)*mu_0*q^2));
+        % otherwise, we are in upstream Jupiter field and need to calculate
+        % ion inertial length using Jupiter plasma density 
+        ion_inertial_length(j,k) = sqrt((pmass)/(jovian_den_2d(j,k)*mu_0*q^2));
     end
 end
 
-
+% For loop to iterate over 2D space and calculate the diamagnetic drift
+for j = 1:n
+    for k = 1:n
+        diamagnetic_rightside(j,k) = 2*atan(ion_inertial_length(j,k)*delta_beta)/(2*ion_inertial_length(j,k));
+    end
+end
 
 %% Calculate the LHS of plasma beta drift condition
 % Reconnection onset requires "a sub-Alfvénic flow shear across the current
@@ -305,11 +295,22 @@ end
 % Calculate flow shear in direction of reconnection outflow
 flowspeed_ganymede = zeros(n,n); % plasma velocity inside the magnetosphere
 flowspeed_upstream = zeros(n,n); % upstream Jovian plasma velocity 
-leftside_2 = zeros(n,n); % vector to store flow shear values 
-
-
+flowshear_leftside = zeros(n,n); % vector to store flow shear values 
 
 
 
 %% Calculate RHS of plasma beta drift condition
+flowshear_rightside = zeros(n,n);
+
+% The following calculation should use variables for Ganymede_bmag and Jovian_bmag that should be only the reconnecting components of
+% the magnetic fields. Until I talk to Carol about which components these should be, using the total mag. as a placeholder.
+% Start loop to calculate components of the RHS
+for i = 1:n
+    for k = 1:n
+        flowshear_rightside(i,k) = sqrt((jovian_bmag_2d(i,k)^2 + jovian_bmag_2d(i,k)*ganymede_bmag_2d(i,k))/jovian_den_2d*mu_0)
+    end
+end
+
+%% Plot regions on projection of Ganymede's surface where reconnection is  either allowed or disallowed based on the 2 conditions
+
 
