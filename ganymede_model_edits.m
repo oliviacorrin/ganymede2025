@@ -18,7 +18,6 @@ pmass = 1.67*10^-27; % (kg) proton mass
 mu_0 = 4*pi*10^-7; % (H/m) vacuum permeability
 emass = 9.109 * 10^-31; % (kg) electron mass
 q = -1.602*10^-19; % (C) electron charge
-flowspeed = 139*10^3; % (m/s) speed of Jovian plasma 
 k_B = 1.38*10^-23; % (JK-1) Boltzmann's constant
 gamma = 5/3; % (dimensionless) used in sonic mach number calculation
 hplus_amu = 1; 
@@ -28,8 +27,8 @@ splus_amu = 32;
 s2plus_amu = 32;
 s3plus_amu = 32;
 %% Ganymede Parameters
-R = 2.634*10^6; % (m) Ganymede radius 
-b_ganymede_eq = 719*10^-9; % (T) Ganymede equatorial dipole field strength 
+R_G = 2.634*10^6; % (m) Ganymede radius 
+b_ganymede_eq = -719*10^-9; % (T) Ganymede equatorial dipole field strength 
 b_ganymede_poles = b_ganymede_eq*2; % (T) Ganymede dipole field strength at poles
 MP = 2.2; % magnetopause standoff distance in planetary radii
 limitplotting = 5; % Random guess for where we want the paraboloid to end
@@ -41,12 +40,12 @@ ganymede_hplus_inertial_length = sqrt(pmass/(ganymede_mass_den*mu_0*q^2)); % () 
 T_g = 116040; % (K) ~10 eV
  
 %% Upstream Parameters
-% Assume B_z is only nonzero component of upstream field (in plasma sheet)
-upstream_Bmag = 1e-6; % (T) Jovian external field magnitude in plasma sheet
-upstream_Bz = upstream_Bmag; 
-% Set other 2 components essentially to 0
-upstream_Bx = 10e-200; % 0
-upstream_By = 10e-200; % 0
+% Most numbers from Santos et al. 2024 or Kivelson et al. (2004)
+upstream_Bmag = 78.6*10^-9; % (T) or 78.6 nT - Jovian external field magnitude in plasma sheet
+upstream_Bz = -77*10^-9; 
+upstream_Bx = -11*10^-9; 
+upstream_By = 11*10^-9;
+flowspeed = 130*10^3; % (m/s) speed of Jovian plasma (Stahl et al. 2023)
 % "Dominant upstream ion species at Ganymede are heavy O+ and S++ ions of
 % Jupiter's plasma torus" (Bagenal & Sullivan, 1981, qtd. in Collinson et
 % al., 2018)
@@ -56,13 +55,15 @@ jupiter_o2plus_num_frac = 0.07;
 jupiter_splus_num_frac = 0.03; 
 jupiter_s2plus_num_frac = 0.17;
 jupiter_s3plus_num_frac = 0.07;
-jupiter_num_den = 10 * 10^6; % (m^-3) 
+jupiter_num_den = 8*10^6; % (m^-3) 8 cm^-3
 jupiter_mass_den = (jupiter_hplus_num_frac * hplus_amu + jupiter_oplus_num_frac * oplus_amu + jupiter_o2plus_num_frac * o2plus_amu + jupiter_splus_num_frac * splus_amu + jupiter_s2plus_num_frac * s2plus_amu + jupiter_s3plus_num_frac * s3plus_amu) * pmass * jupiter_num_den; % (kg/m^3)
+%disp(jupiter_mass_den)
 upstream_hplus_inertial_length = sqrt(pmass/(jupiter_mass_den*mu_0*q^2));
 T_j = 812280; % (K) Bagenal et al. 2016 says it's 60 - 80 eV so choose 70 eV
-upstream_alfven_vel = upstream_Bmag/sqrt(4*pi*jupiter_mass_den); % upstream Alfven velocity V_A = B/sqrt(4*pi*mass density)
+upstream_alfven_vel = upstream_Bmag/sqrt(mu_0*jupiter_mass_den); % upstream Alfven velocity V_A = B/sqrt(4*pi*mass density)
 upstream_alfven_num = flowspeed/upstream_alfven_vel; % (dimless) Alfven Mach number M_A = flowspeed/V_A
-
+%disp(upstream_alfven_vel)
+%disp(upstream_alfven_num)
 %%  Set up volume using meshgrid
 % meshgrid takes 2 input vectors & generates 2 2D matrices representing 
 % coordinates of a grid w/ each element corresponding to a specific (x,y) 
@@ -129,13 +130,6 @@ jovian_bz = zeros(n,n,n);
 jovian_bmag_2d = zeros(n,n,n);
 jovian_den_2d = zeros(n,n,n);
 
-% Initialize vectors to store Ganymede B-field components and density
-% Check to see where/if these are used or duplicated 
-ganymede_bx = zeros(n,n,n);
-ganymede_by = zeros(n,n,n);
-ganymede_bz = zeros(n,n,n);
-ganymede_den = zeros(n,n,n);
-
 % Set initial upstream Jovian field values in 3D space
 for i = 1:1:n
     for j = 1:1:n
@@ -162,9 +156,13 @@ end
 % 9/23: induced dipole is pretty small (pretty much just changing y component) 
 % compared to overall dipole & not in z - start without and go from there
 % (from Carol)
-ganymede_bx = ((-3*b_ganymede_eq*xg.*zg))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
-ganymede_by = ((-3*b_ganymede_eq*yg.*zg))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
-ganymede_bz = ((b_ganymede_eq*(-2*zg.^2+xg.^2+yg.^2)))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
+% Important: need to check w/Carol: r^-3 or r^-5?
+denom_factor = (sqrt(xg.^2+yg.^2+zg.^2)).^3; 
+% denom_factor = (sqrt(xg.^2+yg.^2+zg.^2)).^5; 
+ganymede_bx = ((-3*b_ganymede_eq*xg.*zg))./denom_factor;
+ganymede_by = ((-3*b_ganymede_eq*yg.*zg))./denom_factor;
+ganymede_bz = ((b_ganymede_eq*(-2*zg.^2+xg.^2+yg.^2)))./denom_factor;
+
 % this is a mask so the values are zero if not inside magnetopause 
 ganymede_bx(grid_3d~=0) = 0;
 ganymede_by(grid_3d~=0) = 0;
@@ -293,14 +291,20 @@ diamagnetic_lhs = acos(cos_theta_b);
 ganymede_plasma_pressure = ganymede_den_2d .* k_B .* T_g;
 jovian_plasma_pressure = jovian_den_2d .* k_B * T_j; 
 % Plasma beta calculations
-ganymede_beta = (2*mu_0 .* ganymede_plasma_pressure) ./ (ganymede_bmag_2d.^2); 
-upstream_beta = (2*mu_0 .* jovian_plasma_pressure) ./ (jovian_bmag_2d.^2); 
+% Define a numerical floor for the magnetic field calculations - I think
+% the reason I have been getting an error of my magnetic shear angle = pi
+% radians is b/c the mask on the Ganymede field is sending the delta beta
+% to infinity 
+B_floor = 10^-15;
+
+ganymede_beta = (2*mu_0 .* ganymede_plasma_pressure) ./ (ganymede_bmag_2d.^2 + B_floor); 
+upstream_beta = (2*mu_0 .* jovian_plasma_pressure) ./ (jovian_bmag_2d.^2 + B_floor); 
 delta_beta = abs(upstream_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
 
 % For now, using Jovian density to calculate the ion inertial length -
 % could implement an if/else statement for Ganymede space too but not sure
 % if it's worth it since Jovian field is so much stronger I imagine it controls the
-% behavior?
+% behavior?)
 jovian_number_den = jovian_den_2d ./ pmass; % ion number density 
 ion_inertial_length = sqrt(pmass ./ (jovian_number_den .* mu_0 * q^2)); 
 L = ion_inertial_length; % (km) Masters sets current sheet thickness to ion inertial length - is this appropriate for Ganymede?
@@ -367,7 +371,7 @@ flowshear_rhs = sqrt((jovian_2db_projection.^2 + (jovian_2db_projection .* ganym
 %% Determine regions where reconnection is allowed and where it is disallowed
 % Logical check for diamagnetic drift condition
 diamagnetic_shear_condition = (diamagnetic_lhs > diamagnetic_rhs);
-
+%disp(max(diamagnetic_rhs))
 % Logical check for flow shear condition
 flow_shear_condition = (flowshear_lhs < flowshear_rhs);
 
