@@ -10,6 +10,8 @@
 % add flaring angle to paraboloid?
 % look into whether or not we can assume A = 2 (from Cooling paper)
 % add variable Jovian field & density!
+% field strength at poles is 2x equatorial field strength - incorporate
+% this geometrically somehow? (ask Carol)
 
 %% Constants
 pmass = 1.67*10^-27; % (kg) proton mass
@@ -19,17 +21,24 @@ q = -1.602*10^-19; % (C) electron charge
 flowspeed = 139*10^3; % (m/s) speed of Jovian plasma 
 k_B = 1.38*10^-23; % (JK-1) Boltzmann's constant
 gamma = 5/3; % (dimensionless) used in sonic mach number calculation
-L = 1; % (km) current sheet half-thickness - no idea what is realistic to put here...
-
+hplus_amu = 1; 
+oplus_amu = 16; 
+o2plus_amu = 16;
+splus_amu = 32;
+s2plus_amu = 32;
+s3plus_amu = 32;
 %% Ganymede Parameters
 R = 2.634*10^6; % (m) Ganymede radius 
 b_ganymede_eq = 719*10^-9; % (T) Ganymede equatorial dipole field strength 
+b_ganymede_poles = b_ganymede_eq*2; % (T) Ganymede dipole field strength at poles
 MP = 2.2; % magnetopause standoff distance in planetary radii
-limitplotting = 8; % Random guess for where we want the paraboloid to end
-ganymede_surface_den = 0.002 * 10^6 * pmass; % (kg/m^3) need Ganymede value. plasma mass density inside Ganymede's magnetosphere
-alfven_num = 0.62; % Alfven Mach number
-ganymede_ionlength = sqrt(pmass/(ganymede_surface_den*mu_0*q^2)); 
-T_g = 1; % placeholder for plasma temperature value
+limitplotting = 5; % Random guess for where we want the paraboloid to end
+ganymede_oplus_num_frac = .87;
+ganymede_hplus_num_frac = .13;
+ganymede_num_den = 8 * 10^6; % (m^-3) this will eventually be variable: ~8cm^-3 inside the PS, ~1cm^-3 outside the PS
+ganymede_mass_den = (hplus_amu * ganymede_hplus_num_frac + oplus_amu * ganymede_oplus_num_frac) * pmass * ganymede_num_den; % (kg/m^3)
+ganymede_hplus_inertial_length = sqrt(pmass/(ganymede_mass_den*mu_0*q^2)); % () ion inertial length - 
+T_g = 116040; % (K) ~10 eV
  
 %% Upstream Parameters
 % Assume B_z is only nonzero component of upstream field (in plasma sheet)
@@ -38,9 +47,21 @@ upstream_Bz = upstream_Bmag;
 % Set other 2 components essentially to 0
 upstream_Bx = 10e-200; % 0
 upstream_By = 10e-200; % 0
-jupiter_den = 0.03 * 10^6 * pmass; % (kg/m^3) come back to this. plasma mass density on the Jovian side of the magnetopause
-upstream_ionlength = sqrt(pmass/(jupiter_den*mu_0*q^2));
-T_j = 1; % placeholder for plasma temperature value
+% "Dominant upstream ion species at Ganymede are heavy O+ and S++ ions of
+% Jupiter's plasma torus" (Bagenal & Sullivan, 1981, qtd. in Collinson et
+% al., 2018)
+jupiter_hplus_num_frac = 0.1;
+jupiter_oplus_num_frac = 0.2; 
+jupiter_o2plus_num_frac = 0.07;
+jupiter_splus_num_frac = 0.03; 
+jupiter_s2plus_num_frac = 0.17;
+jupiter_s3plus_num_frac = 0.07;
+jupiter_num_den = 10 * 10^6; % (m^-3) 
+jupiter_mass_den = (jupiter_hplus_num_frac * hplus_amu + jupiter_oplus_num_frac * oplus_amu + jupiter_o2plus_num_frac * o2plus_amu + jupiter_splus_num_frac * splus_amu + jupiter_s2plus_num_frac * s2plus_amu + jupiter_s3plus_num_frac * s3plus_amu) * pmass * jupiter_num_den; % (kg/m^3)
+upstream_hplus_inertial_length = sqrt(pmass/(jupiter_mass_den*mu_0*q^2));
+T_j = 812280; % (K) Bagenal et al. 2016 says it's 60 - 80 eV so choose 70 eV
+upstream_alfven_vel = upstream_Bmag/sqrt(4*pi*jupiter_mass_den); % upstream Alfven velocity V_A = B/sqrt(4*pi*mass density)
+upstream_alfven_num = flowspeed/upstream_alfven_vel; % (dimless) Alfven Mach number M_A = flowspeed/V_A
 
 %%  Set up volume using meshgrid
 % meshgrid takes 2 input vectors & generates 2 2D matrices representing 
@@ -51,8 +72,8 @@ n = 101; % resolution (number of points along each axis)
 % Create 1D vectors of x,y,z coordinates to define spatial extent of the
 % volume grid 
 xi = linspace(-MP-1,limitplotting,n); 
-yi = linspace(-8,8,n);
-zi = linspace(-8,8,n);
+yi = linspace(-limitplotting,limitplotting,n);
+zi = linspace(-limitplotting,limitplotting,n);
 % Create the corresponding arrays  
 [xg,yg,zg] = meshgrid(xi,yi,zi); % creates three 3D matrices xg,yg,zg containing x,y,z coordinates for every pt. in the volume
 
@@ -77,7 +98,7 @@ p2 = 1/(2*mp2)*(yii.^2 + zii.^2) - mp2; % second bounding paraboloid loacted sli
 %% Define grid spaces where Jovian field &  magnetosphere are located.
 % All spaces where grid = 0 are inside the magnetosphere 
 
-grid = zeros(n,n,n); % create 3D matrix of zeros for each point inside the grid
+grid_3d = zeros(n,n,n); % create 3D matrix of zeros for each point inside the grid
 
 % Set all grid points located outside the magnetosphere in the upstream
 % Jovian field to 1
@@ -88,12 +109,12 @@ for i = 1:n
             % if the x-coordinate of the grid < x-coordinate of the
             % paraboloid then you are in Jovian regime
             if xg(1,j,1) < paraboloid(i,k)
-                grid(i,j,k) = 1; % Jupiter space
+                grid_3d(i,j,k) = 1; % Jupiter space
 
             % otherwise the x-coordinate of the grid => x-coordinate of the
             % paraboloid and you are in Ganymede regime 
             else
-                grid(i,j,k) = 0; % Ganymede space
+                grid_3d(i,j,k) = 0; % Ganymede space
             end
         end
     end
@@ -119,7 +140,7 @@ ganymede_den = zeros(n,n,n);
 for i = 1:1:n
     for j = 1:1:n
         for k = 1:1:n
-            if grid(i,j,k) == 0 % if magnetosphere, set Jovian values to zero at these spots in grid
+            if grid_3d(i,j,k) == 0 % if magnetosphere, set Jovian values to zero at these spots in grid
                 jovian_bz(i,j,k) = 0;
                 jovian_bx(i,j,k) = 0;
                 jovian_by(i,j,k) = 0;
@@ -129,7 +150,7 @@ for i = 1:1:n
                 jovian_by(i,j,k) = upstream_By;
                 jovian_bx(i,j,k) = upstream_Bx;
                 jovian_bmag_2d(i,j,k) = sqrt(jovian_bz(i,j,k)^2 + jovian_by(i,j,k)^2 + jovian_bx(i,j,k)^2);
-                jovian_den_2d(i,j,k) = jupiter_den;
+                jovian_den_2d(i,j,k) = jupiter_mass_den;
             end
         end
     end
@@ -145,9 +166,9 @@ ganymede_bx = ((-3*b_ganymede_eq*xg.*zg))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
 ganymede_by = ((-3*b_ganymede_eq*yg.*zg))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
 ganymede_bz = ((b_ganymede_eq*(-2*zg.^2+xg.^2+yg.^2)))./((sqrt(xg.^2+yg.^2+zg.^2)).^5);
 % this is a mask so the values are zero if not inside magnetopause 
-ganymede_bx(grid~=0) = 0;
-ganymede_by(grid~=0) = 0;
-ganymede_bz(grid~=0) = 0;
+ganymede_bx(grid_3d~=0) = 0;
+ganymede_by(grid_3d~=0) = 0;
+ganymede_bz(grid_3d~=0) = 0;
 
 %% Employ approach from Cooling et al. (2001) to drape the Jovian field lines
 % over the magnetopause nose
@@ -215,15 +236,16 @@ ganymede_bmag_2d = zeros(n,n); % 2D Ganymede B field magnitude array
 % We need to find the closest spots on p1 and p2 to bound the current sheet analog we are
 % defining.
 % Calculate distance from each x coordinate to target and find the minimum
+% distance between the magnetopause paraboloid and constructed paraboloids 
 for i = 1:n
         for k = 1:n
             [~, p1_x] = min(abs(xi - p1(i,k))); % store the index of the minimum in p1_x_min - this is one x bound of the current sheet
-            [~, p2_x] = min(abs(xi - p2(i,k))); % store the index of the minimum in p1_x_min - this is one x bound of the current sheet
+            [~, p2_x] = min(abs(xi - p2(i,k))); % store the index of the minimum in p1_x_min - this is the second x bound of the current sheet
 
             % Now fill in the 2D boundary arrays with the 3D field values
             % at the boundary points (each point at index i, p1_x, k)
             % Ganymede arrays
-            ganymede_den_2d(i,k) = ganymede_surface_den; % constant plasma density assumed inside the magnetosphere
+            ganymede_den_2d(i,k) = ganymede_mass_den; % constant plasma density assumed inside the magnetosphere
             ganymede_bx_2d(i,k) = ganymede_bx(i, p1_x, k);
             ganymede_by_2d(i,k) = ganymede_by(i, p1_x, k);
             ganymede_bz_2d(i,k) = ganymede_bz(i, p1_x, k);
@@ -231,7 +253,7 @@ for i = 1:n
             ganymede_bmag_2d(i,k) = sqrt(ganymede_bx_2d(i,k)^2 + ganymede_by_2d(i,k)^2 + ganymede_bz_2d(i,k)^2);
        
             % Jovian arrays
-            jovian_den_2d(i,k) = jupiter_den; % will vary this later
+            jovian_den_2d(i,k) = jupiter_mass_den; % will vary this later
             jovian_bx_2d(i,k) = drape_bx(i, p2_x, k);
             jovian_by_2d(i,k) = drape_by(i, p2_x, k);
             jovian_bz_2d(i,k) = drape_bz(i, p2_x, k);
@@ -271,8 +293,8 @@ diamagnetic_lhs = acos(cos_theta_b);
 ganymede_plasma_pressure = ganymede_den_2d .* k_B .* T_g;
 jovian_plasma_pressure = jovian_den_2d .* k_B * T_j; 
 % Plasma beta calculations
-ganymede_beta = 2*mu_0 .* ganymede_plasma_pressure .\ ganymede_bmag_2d.^2; 
-upstream_beta = 2*mu_0 .* jovian_plasma_pressure .\ jovian_bmag_2d.^2; 
+ganymede_beta = (2*mu_0 .* ganymede_plasma_pressure) ./ (ganymede_bmag_2d.^2); 
+upstream_beta = (2*mu_0 .* jovian_plasma_pressure) ./ (jovian_bmag_2d.^2); 
 delta_beta = abs(upstream_beta - ganymede_beta); % change in plasma beta values between Jovian & Ganymede magnetic environments
 
 % For now, using Jovian density to calculate the ion inertial length -
@@ -281,6 +303,7 @@ delta_beta = abs(upstream_beta - ganymede_beta); % change in plasma beta values 
 % behavior?
 jovian_number_den = jovian_den_2d ./ pmass; % ion number density 
 ion_inertial_length = sqrt(pmass ./ (jovian_number_den .* mu_0 * q^2)); 
+L = ion_inertial_length; % (km) Masters sets current sheet thickness to ion inertial length - is this appropriate for Ganymede?
 
 % Calculate the RHS of the diamagnetic drift condition and store it 
 diamagnetic_rhs = 2 .* atan((ion_inertial_length .* delta_beta)./ (2 .* L));
@@ -350,11 +373,11 @@ flow_shear_condition = (flowshear_lhs < flowshear_rhs);
 
 % If both conditions are met, we have reconnection! 
 % ...IT'S ALIVE!!!! 
-reconnection_frankenstein = diamagnetic_shear_condition & flow_shear_condition; 
+reconnection_check = diamagnetic_shear_condition & flow_shear_condition; 
 
 %% Plot reconnection regions
 % Convert reconnection_frankenstein from logical array to color map array
-reconnection_colors = double(reconnection_frankenstein);
+reconnection_colors = double(reconnection_check);
 
 % Create figure for plotting
 figure; 
@@ -367,6 +390,7 @@ clim([0 1]); % set color limits to logical values
 
 view(3); % 3D
 axis equal; 
+grid on; 
 
 xlabel('X (R_G)');
 ylabel('Y (R_G)');
