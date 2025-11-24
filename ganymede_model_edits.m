@@ -4,12 +4,17 @@
 % Code developed by Olivia Corrin and Katelin Donaldson at the University of Oregon, 
 % with help from prior work from Angela (last name?) 
 
+% As of 11/23:
+% Bisector_y (and maybe others) have imaginary numbers in them - fix? D:
+% B field strength is stronger at equator than poles...wtf 
+
 % Current todos: 
 % more accurate plasma density values (in Jbook?)
 % more accurate guess for paraboloid end value
 % add flaring angle to paraboloid?
 % look into whether or not we can assume A = 2 (from Cooling paper)
 % add variable Jovian field & density!
+% add x and y comps. to mag moment.
 % field strength at poles is 2x equatorial field strength - incorporate
 % this geometrically somehow? (ask Carol)
 
@@ -26,6 +31,7 @@ o2plus_amu = 16;
 splus_amu = 32;
 s2plus_amu = 32;
 s3plus_amu = 32;
+
 %% Ganymede Parameters
 R_G = 2.634*10^6; % (m) Ganymede radius 
 b_ganymede_eq = -719*10^-9; % (T) Ganymede equatorial dipole field strength 
@@ -156,17 +162,46 @@ end
 % 9/23: induced dipole is pretty small (pretty much just changing y component) 
 % compared to overall dipole & not in z - start without and go from there
 % (from Carol)
-% Important: need to check w/Carol: r^-3 or r^-5?
-denom_factor = (sqrt(xg.^2+yg.^2+zg.^2)).^3; 
-% denom_factor = (sqrt(xg.^2+yg.^2+zg.^2)).^5; 
-ganymede_bx = ((-3*b_ganymede_eq*xg.*zg))./denom_factor;
-ganymede_by = ((-3*b_ganymede_eq*yg.*zg))./denom_factor;
-ganymede_bz = ((b_ganymede_eq*(-2*zg.^2+xg.^2+yg.^2)))./denom_factor;
+
+% Magnetic flux density for a dipole with constant magnetic moment M: (Chow 2006)
+% B(r) = (mu_0 / 4pi) * ((3r * (m /dot r) / r_mag^5) - (m / r_mag^3)
+% Here, r = (xg, yg, zg), mag_r = norm(r)
+% Need to convert to meters b/c b_ganymede_eq is in SI units
+xg_m = xg .* R_G; % (m)
+yg_m = yg .* R_G; % (m)
+zg_m = zg .* R_G; % (m)
+r_mag = (sqrt(xg_m.^2 + yg_m.^2 + zg_m.^2));  % (m)
+
+% To calculate magnetic moment: using Kivelson et al. "Ganymede's internal
+% dipole moment is tilted 176 degrees from its spin axis" 
+dipole_tilt = deg2rad(176); % (radians)
+
+% Rearrange the equatorial field equation B_ganymede_eq = (mu_0 * M_mag) /
+% (4 * pi * R_G^3) to solve for M_mag 
+M_mag = (4 * pi * R_G^3 * abs(b_ganymede_eq)) / mu_0; % (T*m^3)  
+M_x = M_mag * sin(dipole_tilt); % (T*m^3)
+M_y = 0; % (T*m^3) I think it would be 0 given this definition but I could be wrong?
+M_z = M_mag * cos(dipole_tilt); % (T*m^3)  
+
+% Calculate M /dot r and store it to solve for B field
+M_dot_r = (M_x .* xg_m) + (M_y .* yg_m) + (M_z .* zg_m);
+
+% Solve for field components  
+coeff = (mu_0 / (4 * pi * r_mag.^5));
+ganymede_bx = coeff .* ((3 .* xg_m .* M_dot_r) - (M_x .* r_mag.^2));
+ganymede_by = coeff .* ((3 .* yg_m .* M_dot_r) - (M_y .* r_mag.^2));
+ganymede_bz = coeff .* ((3 .* zg_m .* M_dot_r) - (M_z .* r_mag.^2));
 
 % this is a mask so the values are zero if not inside magnetopause 
 ganymede_bx(grid_3d~=0) = 0;
 ganymede_by(grid_3d~=0) = 0;
 ganymede_bz(grid_3d~=0) = 0;
+
+% Limit the field to avoid computational artifacts
+r_limit = 6;
+ganymede_bx(r_mag > r_limit) = 0;
+ganymede_by(r_mag > r_limit) = 0;
+ganymede_bz(r_mag > r_limit) = 0;
 
 %% Employ approach from Cooling et al. (2001) to drape the Jovian field lines
 % over the magnetopause nose
@@ -338,9 +373,16 @@ flowshear_lhs = flowspeed; % simplification for now of flow shear - see logic ab
 % and Drake, 2007; Derosche et al, 2012) as quoted in Masters 2014
 % Bisector line is perpendicular to both fields, so this should be defined
 % by their cross product
-bisector_x = ganymede_by_2d .* jovian_bz_2d - ganymede_bz_2d .* jovian_by_2d;
-bisector_y = ganymede_bz_2d .* jovian_bx_2d - ganymede_bx_2d .* jovian_bz_2d;
-bisector_z = ganymede_bx_2d .* jovian_by_2d - ganymede_by_2d .* jovian_bx_2d;
+%bisector_x = ganymede_by_2d .* jovian_bz_2d - ganymede_bz_2d .* jovian_by_2d;
+%bisector_y = ganymede_bz_2d .* jovian_bx_2d - ganymede_bx_2d .* jovian_bz_2d;
+%bisector_z = ganymede_bx_2d .* jovian_by_2d - ganymede_by_2d .* jovian_bx_2d;
+
+% 11/23: I think this might actually be asking for the bisector to be the
+% vector sum between the two fields, so I am changing the calculation, but
+% leaving the old one above since this is still confusing me:
+bisector_x = jovian_bx_2d + ganymede_bx_2d; 
+bisector_y = jovian_by_2d + ganymede_by_2d; 
+bisector_z = jovian_bz_2d + ganymede_bz_2d; 
 
 % The outflow direction is then perpendicular to this bisector and also
 % parallel to the magnetopause - in the case of this simplified model, which 
@@ -365,8 +407,9 @@ outflow_dir_z = bisector_y / (sqrt(bisector_y^2 + bisector_z^2));
 jovian_2db_projection = abs(jovian_by_2d .* outflow_dir_y + jovian_bz_2d .* outflow_dir_z);
 ganymede_2db_projection = abs(ganymede_by_2d .* outflow_dir_y + ganymede_bz_2d .* outflow_dir_z);
 
-% Calculate the entire RHS and store it
-flowshear_rhs = sqrt((jovian_2db_projection.^2 + (jovian_2db_projection .* ganymede_2db_projection))/(jovian_den_2d*mu_0));
+% Calculate the RHS of the flowshear equation using the components of the
+% B-fields in the outflow direction
+flowshear_rhs = sqrt((jovian_2db_projection.^2 + (jovian_2db_projection .* ganymede_2db_projection)) ./ (jovian_den_2d*mu_0));
 
 %% Determine regions where reconnection is allowed and where it is disallowed
 % Logical check for diamagnetic drift condition
@@ -380,17 +423,26 @@ flow_shear_condition = (flowshear_lhs < flowshear_rhs);
 reconnection_check = diamagnetic_shear_condition & flow_shear_condition; 
 
 %% Plot reconnection regions
-% Convert reconnection_frankenstein from logical array to color map array
+% Convert reconnection_check from logical array to color map array
 reconnection_colors = double(reconnection_check);
 
 % Create figure for plotting
 figure; 
 hold on; 
-colormap([0 1 0; 1 1 0]); 
 
-plot_surface = surf(paraboloid, yii, zii, reconnection_colors); % plot the paraboloid surface with the color map
-set(plot_surface, 'EdgeColor', 'none', 'FaceColor', 'flat'); % want the delineations between regions to be clear
-clim([0 1]); % set color limits to logical values
+% Add the reconnection color map to display which areas on the paraboloid
+% permit reconnection and which forbid it.
+%colormap([1 0 0; 0 0.8 1]); 
+%plot_surface = surf(paraboloid, yii, zii, reconnection_colors); % plot the paraboloid surface with the color map
+%set(plot_surface, 'EdgeColor', 'none', 'FaceColor', 'flat'); % want the delineations between regions to be clear
+%clim([0 1]); % set color limits to logical values
+
+% Plot some parameters to the paraboloid surface to visualize our
+% environment.
+plot_surface = surf(paraboloid, yii, zii, ganymede_bmag_2d); 
+set(plot_surface, 'EdgeColor', 'none');
+colormap("autumn"); % I don't like the default colorbar lol
+clim([0, 10^(-8)]); % IMPORTANT to adjust this to scale to the parameter you are plotting!!! 
 
 view(3); % 3D
 axis equal; 
@@ -400,6 +452,18 @@ xlabel('X (R_G)');
 ylabel('Y (R_G)');
 zlabel('Z (R_G)');
 
+% Reconnection title
 title('Predicted magnetic reconnection regions at the magnetopause of Ganymede');
 
-colorbar('Ticks', [0.25, 0.75], 'TickLabels', {'Reconnection disallowed', 'Reconnection allowed'});
+% Reconnection color bar
+% colorbar('Ticks', [0.25, 0.75], 'TickLabels', {'Reconnection disallowed', 'Reconnection allowed'});
+
+% Parameter check title
+%title('Jovian upstream B field values mapped to Ganymede 2D magnetopause surface paraboloid');
+%title('Dipole B field values mapped to Ganymede 2D magnetopause surface paraboloid');
+% Still trying to figure out the quiver plot - come back later
+%quiver3(ganymede_bx_2d(:,:), ganymede_by_2d(:,:), ganymede_bz_2d(:,:), paraboloid(:,:), yii(:,:), zii(:,:), 5);
+
+% Continuous color bar e.g. for B field
+c = colorbar();
+c.Label.String = "B field (T)";
