@@ -107,6 +107,8 @@ p2 = 1/(2*mp2)*(yii.^2 + zii.^2) - mp2; % second bounding paraboloid loacted sli
 
 grid_3d = zeros(n,n,n); % create 3D matrix of zeros for each point inside the grid
 
+%% Finish later tonight 12/8: double check that x,y,z are assigned to correct coordinates
+%% Why is b_ganymede_2d entirely consisting of 0's after assignment? 
 % Set all grid points located outside the magnetosphere in the upstream
 % Jovian field to 1
 % iterate over every point (i,j,k) inside the volume 
@@ -166,33 +168,20 @@ end
 % Magnetic flux density for a dipole with constant magnetic moment M: (Chow 2006)
 % B(r) = (mu_0 / 4pi) * ((3r * (m /dot r) / r_mag^5) - (m / r_mag^3)
 % Here, r = (xg, yg, zg), mag_r = norm(r)
-% Need to convert to meters b/c b_ganymede_eq is in SI units
+% Need to convert to meters b/c b_ganymede_eq is in SI units while xg,yg,rg
+% are defined in terms of Ganymede radius (following from the standoff
+% point definition)
 xg_m = xg .* R_G; % (m)
 yg_m = yg .* R_G; % (m)
 zg_m = zg .* R_G; % (m)
 r_mag = (sqrt(xg_m.^2 + yg_m.^2 + zg_m.^2));  % (m)
 
-% To calculate magnetic moment: using Kivelson et al. "Ganymede's internal
-% dipole moment is tilted 176 degrees from its spin axis" 
-dipole_tilt = deg2rad(176); % (radians)
+% Solve for field components 
+ganymede_bx = ((-3 * b_ganymede_eq .* xg_m .* zg_m) ./ (r_mag).^5);
+ganymede_by = ((-3 * b_ganymede_eq .* yg_m .* zg_m) ./ (r_mag).^5);
+ganymede_bz = ((b_ganymede_eq .* (r_mag).^2) ./ (r_mag).^5);
 
-% Rearrange the equatorial field equation B_ganymede_eq = (mu_0 * M_mag) /
-% (4 * pi * R_G^3) to solve for M_mag 
-M_mag = (4 * pi * R_G^3 * abs(b_ganymede_eq)) / mu_0; % (T*m^3)  
-M_x = M_mag * sin(dipole_tilt); % (T*m^3)
-M_y = 0; % (T*m^3) I think it would be 0 given this definition but I could be wrong?
-M_z = M_mag * cos(dipole_tilt); % (T*m^3)  
-
-% Calculate M /dot r and store it to solve for B field
-M_dot_r = (M_x .* xg_m) + (M_y .* yg_m) + (M_z .* zg_m);
-
-% Solve for field components  
-coeff = (mu_0 / (4 * pi * r_mag.^5));
-ganymede_bx = coeff .* ((3 .* xg_m .* M_dot_r) - (M_x .* r_mag.^2));
-ganymede_by = coeff .* ((3 .* yg_m .* M_dot_r) - (M_y .* r_mag.^2));
-ganymede_bz = coeff .* ((3 .* zg_m .* M_dot_r) - (M_z .* r_mag.^2));
-
-% this is a mask so the values are zero if not inside magnetopause 
+% This is a mask so the values are zero if not inside magnetopause 
 ganymede_bx(grid_3d~=0) = 0;
 ganymede_by(grid_3d~=0) = 0;
 ganymede_bz(grid_3d~=0) = 0;
@@ -272,6 +261,8 @@ ganymede_bmag_2d = zeros(n,n); % 2D Ganymede B field magnitude array
 % distance between the magnetopause paraboloid and constructed paraboloids 
 for i = 1:n
         for k = 1:n
+            % Discard the value of the x-difference between the two
+            % paraboloids but store the index of that value 
             [~, p1_x] = min(abs(xi - p1(i,k))); % store the index of the minimum in p1_x_min - this is one x bound of the current sheet
             [~, p2_x] = min(abs(xi - p2(i,k))); % store the index of the minimum in p1_x_min - this is the second x bound of the current sheet
 
@@ -432,17 +423,17 @@ hold on;
 
 % Add the reconnection color map to display which areas on the paraboloid
 % permit reconnection and which forbid it.
-%colormap([1 0 0; 0 0.8 1]); 
-%plot_surface = surf(paraboloid, yii, zii, reconnection_colors); % plot the paraboloid surface with the color map
-%set(plot_surface, 'EdgeColor', 'none', 'FaceColor', 'flat'); % want the delineations between regions to be clear
-%clim([0 1]); % set color limits to logical values
+colormap([1 0 0; 0 0.8 1]); 
+plot_surface = surf(paraboloid, yii, zii, reconnection_colors); % plot the paraboloid surface with the color map
+set(plot_surface, 'EdgeColor', 'none', 'FaceColor', 'flat'); % want the delineations between regions to be clear
+clim([0 1]); % set color limits to logical values
 
 % Plot some parameters to the paraboloid surface to visualize our
 % environment.
-plot_surface = surf(paraboloid, yii, zii, ganymede_bmag_2d); 
-set(plot_surface, 'EdgeColor', 'none');
-colormap("autumn"); % I don't like the default colorbar lol
-clim([0, 10^(-8)]); % IMPORTANT to adjust this to scale to the parameter you are plotting!!! 
+% plot_surface = surf(paraboloid, yii, zii, ganymede_bmag_2d); 
+% set(plot_surface, 'EdgeColor', 'none');
+% colormap("autumn"); % I don't like the default colorbar lol
+% clim([0, 10^(-8)]); % IMPORTANT to adjust this to scale to the parameter you are plotting!!! 
 
 view(3); % 3D
 axis equal; 
@@ -456,7 +447,7 @@ zlabel('Z (R_G)');
 title('Predicted magnetic reconnection regions at the magnetopause of Ganymede');
 
 % Reconnection color bar
-% colorbar('Ticks', [0.25, 0.75], 'TickLabels', {'Reconnection disallowed', 'Reconnection allowed'});
+colorbar('Ticks', [0.25, 0.75], 'TickLabels', {'Reconnection disallowed', 'Reconnection allowed'});
 
 % Parameter check title
 %title('Jovian upstream B field values mapped to Ganymede 2D magnetopause surface paraboloid');
@@ -465,5 +456,5 @@ title('Predicted magnetic reconnection regions at the magnetopause of Ganymede')
 %quiver3(ganymede_bx_2d(:,:), ganymede_by_2d(:,:), ganymede_bz_2d(:,:), paraboloid(:,:), yii(:,:), zii(:,:), 5);
 
 % Continuous color bar e.g. for B field
-c = colorbar();
-c.Label.String = "B field (T)";
+% c = colorbar();
+% c.Label.String = "B field (T)";
